@@ -1,0 +1,66 @@
+# Define constants for the registry path and key names
+$RegistryPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
+$KeyName_TargetReleaseVersion = "TargetReleaseVersion"
+$KeyName_TargetReleaseVersionInfo = "TargetReleaseVersionInfo"
+$LogFile = "C:\Temp\WindowsUpdateFix.log"  # Update this path as needed
+
+# Function to log messages to a specified log file
+function Write-Log {
+    param (
+        [string]$Message,
+        [string]$LogFile = $LogFile
+    )
+    $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $LogMessage = "$Timestamp - $Message"
+    Add-Content -Path $LogFile -Value $LogMessage
+}
+
+# Function to set up the PSWindowsUpdate module and required dependencies
+function Initialize-PSWindowsUpdate {
+    Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+    Install-Module -Name PSWindowsUpdate -Force -AllowClobber
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
+    Import-Module PSWindowsUpdate
+}
+
+# Check if the registry path exists
+if (Test-Path -Path $RegistryPath) {
+    Write-Log "Registry path '$RegistryPath' exists."
+
+    # Check and update TargetReleaseVersion if it exists and is set to 1
+    $TargetReleaseVersionExists = Get-ItemProperty -Path $RegistryPath -Name $KeyName_TargetReleaseVersion -ErrorAction SilentlyContinue
+    if ($TargetReleaseVersionExists -ne $null) {
+        $TargetReleaseVersion = (Get-ItemProperty -Path $RegistryPath -Name $KeyName_TargetReleaseVersion).TargetReleaseVersion
+        if ($TargetReleaseVersion -eq 1) {
+            Set-ItemProperty -Path $RegistryPath -Name $KeyName_TargetReleaseVersion -Value 0
+            Write-Log "Updated '$KeyName_TargetReleaseVersion' to 0."
+        }
+    } else {
+        Write-Log "The registry key '$KeyName_TargetReleaseVersion' does not exist."
+    }
+
+    # Remove TargetReleaseVersionInfo if it exists
+    $TargetReleaseVersionInfoExists = Get-ItemProperty -Path $RegistryPath -Name $KeyName_TargetReleaseVersionInfo -ErrorAction SilentlyContinue
+    if ($TargetReleaseVersionInfoExists -ne $null) {
+        Remove-ItemProperty -Path $RegistryPath -Name $KeyName_TargetReleaseVersionInfo -ErrorAction SilentlyContinue
+        Write-Log "Removed '$KeyName_TargetReleaseVersionInfo'."
+    }
+} else {
+    Write-Log "The registry path '$RegistryPath' does not exist."
+}
+
+# Initialize the PSWindowsUpdate module and install necessary providers
+Initialize-PSWindowsUpdate
+
+# Fetch available updates that match "23H2" or "24H2" in the title
+$UpdatesToInstall = Get-WindowsUpdate | Where-Object { $_.Title -match '2[34]H2' }
+
+# Install updates if any matching updates were found
+if ($UpdatesToInstall -and $UpdatesToInstall.Count -gt 0) {
+    Write-Log "Installing updates matching '23H2' or '24H2'..."
+    Install-WindowsUpdate -AcceptAll -AutoReboot
+    Write-Log "Updates matching '23H2' or '24H2' have been installed."
+} else {
+    Write-Log "No updates matching '23H2' or '24H2' were found."
+}
