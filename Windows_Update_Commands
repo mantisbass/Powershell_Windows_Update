@@ -1,0 +1,7 @@
+Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+Install-Module -Name PSWindowsUpdate -Force -AllowClobber
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
+Import-Module PSWindowsUpdate
+Get-WindowsUpdate
+Install-WindowsUpdate -AcceptAll -AutoReboot
